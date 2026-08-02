@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>💣 炸彈數字 Bomb Number（雙人歡樂遠端版）</title>
+<!-- PeerJS：讓雙人連線只要打「4碼房間代碼」，不用再複製貼上一大串連線字串 -->
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow-x: hidden; }
+  body {
+    background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 50%, #fbc2eb 100%);
+    font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", "Comic Sans MS", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s ease;
+    position: relative;
+  }
+  body.game-over-bg { background: linear-gradient(135deg, #ff8a8a 0%, #ff4d4d 60%, #d90429 100%); }
+
+  @keyframes screenShake {
+    0% { transform: translate(0,0) rotate(0deg); }
+    10% { transform: translate(-10px,-6px) rotate(-1deg); }
+    20% { transform: translate(10px,6px) rotate(1deg); }
+    30% { transform: translate(-10px,6px) rotate(-1deg); }
+    40% { transform: translate(10px,-6px) rotate(1deg); }
+    50% { transform: translate(-8px,4px) rotate(-0.5deg); }
+    60% { transform: translate(8px,-4px) rotate(0.5deg); }
+    70% { transform: translate(-6px,3px) rotate(-0.5deg); }
+    80% { transform: translate(6px,-3px) rotate(0.5deg); }
+    90% { transform: translate(-3px,2px) rotate(0deg); }
+    100% { transform: translate(0,0) rotate(0deg); }
+  }
+  body.shake { animation: screenShake 0.5s ease; }
+
+  .app-container {
+    width: 100%; max-width: 700px; min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    padding: 16px; position: relative;
+  }
+
+  .info-panel {
+    position: fixed; top: 12px; right: 12px;
+    background: rgba(255,255,255,0.92);
+    border: 3px solid #6c63ff; border-radius: 20px;
+    padding: 10px 16px; font-size: 14px; font-weight: bold; color: #333;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15); z-index: 100; line-height: 1.6; text-align: left;
+  }
+  .info-panel div span { color: #6c63ff; font-size: 16px; }
+
+  .screen {
+    display: none; width: 100%; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    animation: fadeIn 0.4s ease;
+  }
+  .screen.active { display: flex; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
+
+  .main-title {
+    font-size: clamp(32px, 7vw, 56px); color: #ff4d6d;
+    text-shadow: 3px 3px 0 #fff, 6px 6px 0 rgba(0,0,0,0.1);
+    margin: 26px 0 6px 0; font-weight: 900;
+  }
+  .sub-title { font-size: clamp(15px, 3vw, 20px); color: #555; margin-bottom: 18px; font-weight: bold; }
+
+  /* 表情頭像選擇 */
+  .avatar-picker { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; max-width:460px; margin-bottom: 18px; }
+  .avatar-opt {
+    font-size: 30px; background:#fff; border: 3px solid #ddd; border-radius: 16px;
+    width: 56px; height: 56px; display:flex; align-items:center; justify-content:center;
+    cursor: pointer; transition: transform 0.1s ease, border-color 0.15s ease;
+  }
+  .avatar-opt.selected { border-color:#6c63ff; transform: scale(1.15); background:#eef0ff; }
+
+  .connect-choice { display: flex; gap: 16px; width: 100%; max-width: 460px; margin-bottom: 20px; }
+  .choice-btn {
+    flex: 1; background: #fff; border: 4px solid #6c63ff; border-radius: 20px;
+    padding: 22px 10px; font-size: clamp(16px, 3vw, 20px); font-weight: 900; color: #6c63ff;
+    cursor: pointer; box-shadow: 0 6px 0 #4b45b3; transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .choice-btn:active { transform: translateY(6px); box-shadow: 0 0 0 #4b45b3; }
+
+  .mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; width: 100%; max-width: 460px; margin-bottom: 16px; }
+  .mode-btn {
+    background: #ffffff; border: 4px solid #6c63ff; border-radius: 18px; padding: 14px 8px;
+    font-size: clamp(14px, 2.8vw, 18px); font-weight: bold; color: #6c63ff; cursor: pointer;
+    box-shadow: 0 5px 0 #4b45b3; transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .mode-btn:active { transform: translateY(5px); box-shadow: 0 0 0 #4b45b3; }
+  .mode-btn.selected { background: #6c63ff; color: #fff; }
+
+  .custom-box {
+    display: none; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px;
+    background: #fff; border: 3px dashed #ff9a3c; border-radius: 16px; padding: 10px 16px;
+  }
+  .custom-box.show { display: flex; }
+  .custom-box label { font-weight: bold; color: #ff7b00; font-size: 16px; }
+  .custom-box input { width: 64px; font-size: 18px; text-align: center; border: 3px solid #ff9a3c; border-radius: 10px; padding: 6px; font-weight: bold; }
+
+  .hint-text { font-size: 14px; color: #666; background: rgba(255,255,255,0.7); border-radius: 12px; padding: 8px 14px; margin-bottom: 14px; max-width: 460px; }
+
+  /* 房間代碼樣式：大大的、好複製也好唸給對方聽 */
+  .room-code-box {
+    background: #fff; border: 4px dashed #6c63ff; border-radius: 24px;
+    padding: 18px 30px; margin-bottom: 18px;
+  }
+  .room-code-label { font-size: 14px; color: #888; font-weight: bold; margin-bottom: 6px; }
+  .room-code-value {
+    font-size: clamp(40px, 10vw, 60px); font-weight: 900; letter-spacing: 8px; color: #6c63ff;
+  }
+
+  .join-input-box { display:flex; flex-direction:column; align-items:center; gap:12px; margin-bottom: 18px; }
+  .join-code-input {
+    font-size: 36px; letter-spacing: 10px; text-align:center; text-transform:uppercase;
+    width: 220px; padding: 12px; border: 4px solid #6c63ff; border-radius: 18px; font-weight: 900; color:#333;
+  }
+
+  .small-btn {
+    background: #6c63ff; color: #fff; border: none; border-radius: 14px; padding: 12px 22px;
+    font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 0 #4b45b3;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .small-btn:active { transform: translateY(4px); box-shadow: 0 0 0 #4b45b3; }
+  .small-btn.green { background:#22c55e; box-shadow: 0 4px 0 #16803c; }
+  .small-btn.orange { background:#ff9a3c; box-shadow: 0 4px 0 #c76c0e; }
+
+  .conn-status { font-size: 16px; font-weight: bold; color: #ff7b00; margin: 6px 0 16px 0; min-height: 22px; }
+  .conn-status.ok { color: #22c55e; }
+
+  .spinner {
+    width: 40px; height: 40px; border: 6px solid #ddd; border-top-color: #6c63ff;
+    border-radius: 50%; animation: spin 0.8s linear infinite; margin: 10px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .start-btn {
+    background: linear-gradient(135deg, #43e97b, #38f9d7); border: none; border-radius: 30px;
+    padding: 18px 54px; font-size: clamp(20px, 4vw, 28px); font-weight: 900; color: #fff; cursor: pointer;
+    box-shadow: 0 8px 0 #22a06b; transition: transform 0.1s ease, box-shadow 0.1s ease; margin-top: 6px;
+  }
+  .start-btn:active { transform: translateY(8px); box-shadow: 0 0 0 #22a06b; }
+  .start-btn:disabled { background:#ccc; box-shadow:0 8px 0 #999; cursor:not-allowed; }
+
+  .back-link { margin-top: 14px; color: #666; font-size: 14px; font-weight: bold; cursor: pointer; text-decoration: underline; }
+
+  .game-screen { padding-top: 46px; justify-content: center; min-height: 90vh; }
+
+  .turn-banner {
+    font-size: clamp(18px, 4vw, 24px); color: #fff; padding: 10px 26px; border-radius: 18px;
+    font-weight: 900; margin-bottom: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.15); transition: background 0.2s ease;
+  }
+  .turn-banner.my-turn { background: #22c55e; animation: bombPulse 1s infinite; }
+  .turn-banner.wait-turn { background: #999; }
+
+  /* 回合倒數條 */
+  .timer-wrap { width: 100%; max-width: 300px; height: 10px; background: rgba(255,255,255,0.6); border-radius: 10px; overflow: hidden; margin-bottom: 14px; border: 2px solid #fff; }
+  .timer-bar { height: 100%; width: 100%; background: linear-gradient(90deg,#22c55e,#eab308,#ef4444); border-radius: 10px; transform-origin: left; }
+  .timer-bar.running { animation: timerShrink linear forwards; }
+  @keyframes timerShrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+  /* 連續答對 combo 顯示 */
+  .combo-badge {
+    font-size: clamp(16px, 3.5vw, 22px); font-weight: 900; color: #ff6b00;
+    margin-bottom: 10px; min-height: 28px; transition: transform 0.15s ease;
+  }
+  .combo-badge.pop { animation: comboPop 0.3s ease; }
+  @keyframes comboPop { 0%{transform:scale(0.6);} 60%{transform:scale(1.3);} 100%{transform:scale(1);} }
+
+  .number-display {
+    font-size: clamp(90px, 22vw, 170px); font-weight: 900; color: #333; background: #fff; border-radius: 40px;
+    width: clamp(200px, 55vw, 300px); height: clamp(200px, 55vw, 300px);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 0 rgba(0,0,0,0.15), 0 15px 30px rgba(0,0,0,0.2);
+    margin-bottom: 22px; user-select: none; transition: transform 0.15s ease; position: relative;
+  }
+  @keyframes numberPop { 0%{transform:scale(0.5); opacity:0;} 60%{transform:scale(1.15); opacity:1;} 100%{transform:scale(1);} }
+  .number-display.pop { animation: numberPop 0.35s ease; }
+  @keyframes correctFlash { 0%{background:#fff;} 40%{background:#b9fbc0; transform:scale(1.08);} 100%{background:#fff; transform:scale(1);} }
+  .number-display.correct { animation: correctFlash 0.5s ease; }
+  /* 拆彈懸疑動畫：按下按鈕後、結果公布前的緊張抖動 */
+  @keyframes thinkingShake {
+    0%,100% { transform: rotate(0deg) scale(1); }
+    20% { transform: rotate(-3deg) scale(1.03); }
+    40% { transform: rotate(3deg) scale(1.03); }
+    60% { transform: rotate(-2deg) scale(1.02); }
+    80% { transform: rotate(2deg) scale(1.02); }
+  }
+  .number-display.thinking { animation: thinkingShake 0.35s ease infinite; }
+
+  .btn-group { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; width:100%; max-width:500px; }
+  .game-btn {
+    flex: 1; min-width: 140px; font-size: clamp(17px, 3vw, 24px); font-weight: 900; padding: 20px 10px;
+    border: none; border-radius: 24px; cursor: pointer; color: #fff;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, opacity 0.2s ease;
+  }
+  .next-btn { background: linear-gradient(135deg, #4facfe, #00f2fe); box-shadow: 0 8px 0 #2680c2; }
+  .next-btn:active { transform: translateY(8px); box-shadow: 0 0 0 #2680c2; }
+  .bomb-btn { background: linear-gradient(135deg, #ff5f6d, #d90429); box-shadow: 0 8px 0 #a0031f; animation: bombPulse 1.2s infinite; }
+  .bomb-btn:active { transform: translateY(8px); box-shadow: 0 0 0 #a0031f; }
+  @keyframes bombPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.04);} }
+  .game-btn:disabled { opacity: 0.4; cursor: not-allowed; animation: none; box-shadow: none; transform: none; }
+
+  .progress-wrap { width: 100%; max-width: 500px; background: rgba(255,255,255,0.6); border-radius: 20px; height: 18px; margin-top: 22px; overflow: hidden; border: 2px solid #fff; }
+  .progress-bar { height:100%; background: linear-gradient(90deg,#43e97b,#38f9d7); width:0%; transition: width 0.3s ease; border-radius:20px; }
+
+  /* 表情快速反應按鈕 */
+  .reaction-bar { display:flex; gap: 10px; margin-top: 20px; }
+  .reaction-btn {
+    font-size: 26px; background:#fff; border: 3px solid #ddd; border-radius: 50%;
+    width: 50px; height: 50px; cursor: pointer; transition: transform 0.1s ease;
+  }
+  .reaction-btn:active { transform: scale(1.3); }
+
+  /* 飄浮表情動畫 */
+  @keyframes floatUp {
+    0% { transform: translateY(0) scale(0.6); opacity: 0; }
+    20% { opacity: 1; transform: translateY(-10px) scale(1.2); }
+    100% { transform: translateY(-160px) scale(1); opacity: 0; }
+  }
+  .floating-emoji {
+    position: fixed; font-size: 44px; left: 50%; bottom: 30%;
+    transform: translateX(-50%); animation: floatUp 1.4s ease-out forwards;
+    pointer-events: none; z-index: 500;
+  }
+
+  /* 頂部公告 toast */
+  .toast {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-60px);
+    background: #333; color: #fff; padding: 12px 24px; border-radius: 20px; font-weight: bold;
+    font-size: 16px; z-index: 800; opacity: 0; transition: transform 0.3s ease, opacity 0.3s ease;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+  .gameover-screen h1 { font-size: clamp(36px, 8vw, 62px); color:#fff; text-shadow:3px 3px 0 rgba(0,0,0,0.3); margin-bottom:10px; }
+  .gameover-screen .score-text { font-size: clamp(20px, 4.5vw, 30px); color:#fff; font-weight:bold; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 10px 26px; border-radius: 20px; }
+  .gameover-screen .who-text { font-size: clamp(18px, 4vw, 24px); color:#fff; font-weight:900; margin-bottom: 26px; }
+
+  .win-screen h1 { font-size: clamp(34px, 7vw, 56px); color:#ff9a3c; text-shadow:3px 3px 0 #fff; margin-bottom:10px; animation: trophyBounce 0.8s ease infinite; }
+  @keyframes trophyBounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-10px);} }
+  .win-screen .score-text { font-size: clamp(20px, 4.5vw, 28px); color:#333; font-weight:bold; margin-bottom:26px; background:#fff; padding:10px 26px; border-radius:20px; box-shadow:0 4px 10px rgba(0,0,0,0.15); }
+
+  .restart-btn {
+    background: linear-gradient(135deg, #ffd166, #ff9a3c); border:none; border-radius:30px; padding:16px 46px;
+    font-size: clamp(18px, 4vw, 24px); font-weight:900; color:#fff; cursor:pointer;
+    box-shadow: 0 8px 0 #d97706; transition: transform 0.1s ease, box-shadow 0.1s ease;
+  }
+  .restart-btn:active { transform: translateY(8px); box-shadow: 0 0 0 #d97706; }
+
+  #confettiCanvas { position: fixed; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 999; }
+
+  @media (max-width: 400px) {
+    .mode-grid { gap: 8px; }
+    .info-panel { font-size: 12px; padding: 8px 10px; }
+    .btn-group { gap: 12px; }
+    .connect-choice { flex-direction: column; }
+    .join-code-input { width: 180px; font-size: 28px; letter-spacing: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="confettiCanvas"></canvas>
+<div class="toast" id="toast"></div>
+
+<!-- 右上角資訊面板：完全不顯示炸彈規則！ -->
+<div class="info-panel" id="infoPanel" style="display:none;">
+  <div>我是：<span id="infoRole">-</span></div>
+  <div>數字：<span id="infoNumber">-</span></div>
+  <div>團隊分數：<span id="infoScore">0</span></div>
+  <div>最佳：<span id="infoBest">0</span></div>
+</div>
+
+<div class="app-container">
+
+  <!-- ============ 畫面①：首頁（先選表情頭像，再選建立/加入房間） ============ -->
+  <div class="screen active" id="homeScreen">
+    <h1 class="main-title">💣 炸彈數字</h1>
+    <p class="sub-title">雙人遠端合作版：輪流猜數字，小心別踩到炸彈！</p>
+
+    <div class="avatar-picker" id="avatarPicker">
+      <div class="avatar-opt selected" data-avatar="🦁">🦁</div>
+      <div class="avatar-opt" data-avatar="🐼">🐼</div>
+      <div class="avatar-opt" data-avatar="🦊">🦊</div>
+      <div class="avatar-opt" data-avatar="🐸">🐸</div>
+      <div class="avatar-opt" data-avatar="🐧">🐧</div>
+      <div class="avatar-opt" data-avatar="🦄">🦄</div>
+      <div class="avatar-opt" data-avatar="🐯">🐯</div>
+      <div class="avatar-opt" data-avatar="🐵">🐵</div>
+    </div>
+
+    <div class="connect-choice">
+      <button class="choice-btn" id="hostChoiceBtn">🏠 建立房間<br>(當房主)</button>
+      <button class="choice-btn" id="joinChoiceBtn">🔗 加入房間<br>(當玩家二)</button>
+    </div>
+  </div>
+
+  <!-- ============ 畫面②：房主 - 選擇規則 ============ -->
+  <div class="screen" id="hostModeScreen">
+    <h1 class="main-title" style="font-size:clamp(26px,6vw,40px);">🏠 房主設定</h1>
+    <p class="sub-title">請偷偷選擇炸彈規則，對方將不會看到規則提示！</p>
+    <div class="mode-grid" id="modeGrid">
+      <button class="mode-btn" data-mode="5">① 5 的倍數</button>
+      <button class="mode-btn" data-mode="3">② 3 的倍數</button>
+      <button class="mode-btn" data-mode="4">③ 4 的倍數</button>
+      <button class="mode-btn" data-mode="even">④ 偶數</button>
+      <button class="mode-btn" data-mode="odd">⑤ 奇數</button>
+      <button class="mode-btn" data-mode="custom">⑥ 自訂倍數</button>
+    </div>
+    <div class="custom-box" id="customBox">
+      <label for="customInput">輸入倍數 (2~20)：</label>
+      <input type="number" id="customInput" min="2" max="20" value="7">
+    </div>
+    <button class="start-btn" id="hostNextBtn" disabled>下一步：建立房間</button>
+    <div class="back-link" id="backFromHostMode">← 返回首頁</div>
+  </div>
+
+  <!-- ============ 畫面③：房主 - 顯示房間代碼 ============ -->
+  <div class="screen" id="hostConnectScreen">
+    <h1 class="main-title" style="font-size:clamp(24px,5.5vw,36px);">🔗 等待玩家加入</h1>
+    <p class="hint-text">把下方 4 碼房間代碼告訴對方（用講的、打字傳都可以），對方輸入代碼就能連線！</p>
+    <div class="room-code-box">
+      <div class="room-code-label">房間代碼</div>
+      <div class="room-code-value" id="roomCodeValue">----</div>
+    </div>
+    <div class="spinner" id="hostSpinner"></div>
+    <div class="conn-status" id="hostConnStatus">正在準備房間...</div>
+    <div class="back-link" id="backFromHostConnect">← 返回首頁</div>
+  </div>
+
+  <!-- ============ 畫面④：玩家二 - 輸入房間代碼 ============ -->
+  <div class="screen" id="joinScreen">
+    <h1 class="main-title" style="font-size:clamp(24px,5.5vw,36px);">🔗 加入房間</h1>
+    <p class="hint-text">輸入房主告訴你的 4 碼房間代碼</p>
+    <div class="join-input-box">
+      <input type="text" class="join-code-input" id="joinCodeInput" maxlength="4" placeholder="____">
+      <button class="small-btn orange" id="joinConnectBtn">🚀 連線加入</button>
+    </div>
+    <div class="spinner" id="joinSpinner" style="display:none;"></div>
+    <div class="conn-status" id="joinConnStatus">尚未連線</div>
+    <div class="back-link" id="backFromJoin">← 返回首頁</div>
+  </div>
+
+  <!-- ============ 畫面⑤：遊戲進行中 ============ -->
+  <div class="screen game-screen" id="gameScreen">
+    <div class="turn-banner" id="turnBanner">等待中...</div>
+    <div class="timer-wrap"><div class="timer-bar" id="timerBar"></div></div>
+    <div class="combo-badge" id="comboBadge"></div>
+    <div class="number-display" id="numberDisplay">1</div>
+    <div class="btn-group">
+      <button class="game-btn next-btn" id="nextBtn">下一個數字</button>
+      <button class="game-btn bomb-btn" id="bombBtn">💣 Bomb</button>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="reaction-bar">
+      <button class="reaction-btn" data-emoji="😂">😂</button>
+      <button class="reaction-btn" data-emoji="😱">😱</button>
+      <button class="reaction-btn" data-emoji="👍">👍</button>
+      <button class="reaction-btn" data-emoji="🔥">🔥</button>
+    </div>
+  </div>
+
+  <!-- ============ 畫面⑥：失敗畫面 ============ -->
+  <div class="screen gameover-screen" id="gameOverScreen">
+    <h1>❌ Game Over</h1>
+    <div class="who-text" id="whoLostText">對方踩到炸彈了！</div>
+    <div class="score-text">團隊得到 <span id="finalScore">0</span> 分</div>
+    <button class="restart-btn" id="restartBtn1">回到首頁</button>
+  </div>
+
+  <!-- ============ 畫面⑦：全部過關 ============ -->
+  <div class="screen win-screen" id="winScreen">
+    <h1>🏆 恭喜完成！</h1>
+    <div class="score-text">團隊得到 <span id="winScore">0</span> 分</div>
+    <button class="restart-btn" id="restartBtn2">回到首頁</button>
+  </div>
+
+</div>
+
+<script>
+/* ==================================================================
+   💣 炸彈數字 Bomb Number（雙人歡樂遠端版）
+   純 Vanilla JavaScript + PeerJS（房間代碼連線，免複製貼上）
+   ================================================================== */
+
+const MIN_NUMBER = 1;
+const MAX_NUMBER = 100;
+const STORAGE_KEY = 'bombNumber_2p_best';
+const TURN_SECONDS = 12;          // 每回合限時秒數（製造緊張感）
+const ROOM_ID_PREFIX = 'bombnum2p-'; // PeerJS 房間 ID 前綴，避免跟別的應用衝突
+const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 排除易混淆的 O/0/I/1
+
+/* ---------- DOM 元素 ---------- */
+const homeScreen        = document.getElementById('homeScreen');
+const hostModeScreen    = document.getElementById('hostModeScreen');
+const hostConnectScreen = document.getElementById('hostConnectScreen');
+const joinScreen        = document.getElementById('joinScreen');
+const gameScreen        = document.getElementById('gameScreen');
+const gameOverScreen    = document.getElementById('gameOverScreen');
+const winScreen         = document.getElementById('winScreen');
+
+const avatarOpts    = document.querySelectorAll('.avatar-opt');
+const hostChoiceBtn = document.getElementById('hostChoiceBtn');
+const joinChoiceBtn = document.getElementById('joinChoiceBtn');
+
+const modeButtons   = document.querySelectorAll('.mode-btn');
+const customBox     = document.getElementById('customBox');
+const customInput   = document.getElementById('customInput');
+const hostNextBtn   = document.getElementById('hostNextBtn');
+const backFromHostMode = document.getElementById('backFromHostMode');
+
+const roomCodeValue  = document.getElementById('roomCodeValue');
+const hostSpinner    = document.getElementById('hostSpinner');
+const hostConnStatus = document.getElementById('hostConnStatus');
+const backFromHostConnect = document.getElementById('backFromHostConnect');
+
+const joinCodeInput  = document.getElementById('joinCodeInput');
+const joinConnectBtn = document.getElementById('joinConnectBtn');
+const joinSpinner    = document.getElementById('joinSpinner');
+const joinConnStatus = document.getElementById('joinConnStatus');
+const backFromJoin   = document.getElementById('backFromJoin');
+
+const turnBanner    = document.getElementById('turnBanner');
+const timerBar       = document.getElementById('timerBar');
+const comboBadge     = document.getElementById('comboBadge');
+const numberDisplay = document.getElementById('numberDisplay');
+const nextBtn        = document.getElementById('nextBtn');
+const bombBtn        = document.getElementById('bombBtn');
+const progressBar    = document.getElementById('progressBar');
+const reactionBtns   = document.querySelectorAll('.reaction-btn');
+
+const finalScoreEl = document.getElementById('finalScore');
+const whoLostText  = document.getElementById('whoLostText');
+const winScoreEl   = document.getElementById('winScore');
+const restartBtn1  = document.getElementById('restartBtn1');
+const restartBtn2  = document.getElementById('restartBtn2');
+
+const infoPanel  = document.getElementById('infoPanel');
+const infoRole   = document.getElementById('infoRole');
+const infoNumber = document.getElementById('infoNumber');
+const infoScore  = document.getElementById('infoScore');
+const infoBest   = document.getElementById('infoBest');
+
+const toastEl = document.getElementById('toast');
+
+const confettiCanvas = document.getElementById('confettiCanvas');
+const ctx = confettiCanvas.getContext('2d');
+
+/* ---------- 遊戲 / 連線狀態 ---------- */
+let selectedMode  = null;
+let bombDivisor   = null;
+let isHost        = false;
+let myPlayerIndex = null;   // 0 = 房主(我)，1 = 玩家二(他)
+let myAvatar      = '🦁';
+let opponentAvatar = '🐼';
+let currentNumber = MIN_NUMBER;
+let teamScore     = 0;
+let teamStreak    = 0;      // 連續答對次數（combo）
+let isGameActive  = false;
+
+let peer = null;       // PeerJS Peer 物件
+let conn = null;       // PeerJS DataConnection（雙向）
+let turnTimerHandle = null; // 房主用來偵測回合逾時的計時器
+
+/* ==================================================================
+   判斷是否為炸彈（雙方各自用同一套規則計算，但畫面完全不顯示規則文字）
+   ================================================================== */
+function isBombNumber(num) {
+  if (selectedMode === 'even') return num % 2 === 0;
+  if (selectedMode === 'odd')  return num % 2 !== 0;
+  return num % bombDivisor === 0;
+}
+
+/* ==================================================================
+   localStorage：最佳團隊分數
+   ================================================================== */
+function getBestScore() {
+  const val = localStorage.getItem(STORAGE_KEY);
+  return val ? parseInt(val, 10) : 0;
+}
+function saveBestScoreIfNeeded() {
+  if (teamScore > getBestScore()) localStorage.setItem(STORAGE_KEY, String(teamScore));
+}
+
+/* ==================================================================
+   Toast 公告文字（例如連續答對里程碑）
+   ================================================================== */
+let toastTimer = null;
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+
+/* ==================================================================
+   Web Audio API 音效
+   ================================================================== */
+let audioCtx = null;
+function getAudioContext() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function playCorrectSound() {
+  const ac = getAudioContext();
+  const now = ac.currentTime;
+  [880, 1320].forEach((freq, i) => {
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now + i * 0.08);
+    gain.gain.setValueAtTime(0.001, now + i * 0.08);
+    gain.gain.exponentialRampToValueAtTime(0.3, now + i * 0.08 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.25);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(now + i * 0.08); osc.stop(now + i * 0.08 + 0.3);
+  });
+}
+function playExplosionSound() {
+  const ac = getAudioContext();
+  const now = ac.currentTime;
+  const bufferSize = ac.sampleRate * 0.4;
+  const buffer = ac.createBuffer(1, bufferSize, ac.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+  const noiseSource = ac.createBufferSource();
+  noiseSource.buffer = buffer;
+  const filter = ac.createBiquadFilter();
+  filter.type = 'lowpass'; filter.frequency.value = 800;
+  const gain = ac.createGain();
+  gain.gain.setValueAtTime(0.5, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+  noiseSource.connect(filter); filter.connect(gain); gain.connect(ac.destination);
+  noiseSource.start(now); noiseSource.stop(now + 0.4);
+}
+// 拆彈懸疑音效：短促的「滴、滴、滴」計時聲，用於按下按鈕到結果公布之間
+function playTickSound() {
+  const ac = getAudioContext();
+  const now = ac.currentTime;
+  const osc = ac.createOscillator();
+  const gain = ac.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(1200, now);
+  gain.gain.setValueAtTime(0.15, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+  osc.connect(gain); gain.connect(ac.destination);
+  osc.start(now); osc.stop(now + 0.1);
+}
+// 里程碑音效：連續答對時的歡呼音階
+function playComboSound() {
+  const ac = getAudioContext();
+  const now = ac.currentTime;
+  [660, 880, 1100].forEach((freq, i) => {
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, now + i * 0.06);
+    gain.gain.setValueAtTime(0.001, now + i * 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.25, now + i * 0.06 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.2);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(now + i * 0.06); osc.stop(now + i * 0.06 + 0.25);
+  });
+}
+
+/* ==================================================================
+   彩帶特效
+   ================================================================== */
+let confettiParticles = [];
+let confettiAnimationId = null;
+function resizeConfettiCanvas() {
+  confettiCanvas.width = window.innerWidth;
+  confettiCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeConfettiCanvas);
+resizeConfettiCanvas();
+
+function spawnConfetti() {
+  const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#1dd1a1', '#ff9ff3', '#54a0ff'];
+  const centerX = confettiCanvas.width / 2;
+  const centerY = confettiCanvas.height / 2.4;
+  for (let i = 0; i < 40; i++) {
+    confettiParticles.push({
+      x: centerX, y: centerY,
+      vx: (Math.random()-0.5)*12, vy: (Math.random()-1.2)*10,
+      size: Math.random()*8+4, color: colors[Math.floor(Math.random()*colors.length)],
+      rotation: Math.random()*360, rotationSpeed: (Math.random()-0.5)*20,
+      life: 60 + Math.random()*30
+    });
+  }
+  if (!confettiAnimationId) confettiLoop();
+}
+function confettiLoop() {
+  ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+  confettiParticles.forEach(p => {
+    p.vy += 0.4; p.x += p.vx; p.y += p.vy; p.rotation += p.rotationSpeed; p.life -= 1;
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate((p.rotation*Math.PI)/180);
+    ctx.fillStyle = p.color; ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6); ctx.restore();
+  });
+  confettiParticles = confettiParticles.filter(p => p.life > 0 && p.y < confettiCanvas.height+50);
+  if (confettiParticles.length > 0) confettiAnimationId = requestAnimationFrame(confettiLoop);
+  else { ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height); confettiAnimationId = null; }
+}
+
+/* ==================================================================
+   飄浮表情反應動畫
+   ================================================================== */
+function spawnFloatingEmoji(emoji) {
+  const el = document.createElement('div');
+  el.className = 'floating-emoji';
+  el.textContent = emoji;
+  // 隨機水平偏移，讓每次飄浮位置不完全重疊
+  el.style.marginLeft = (Math.random() * 60 - 30) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1500);
+}
+
+/* ==================================================================
+   畫面切換工具
+   ================================================================== */
+function switchScreen(target) {
+  [homeScreen, hostModeScreen, hostConnectScreen, joinScreen, gameScreen, gameOverScreen, winScreen]
+    .forEach(s => s.classList.remove('active'));
+  target.classList.add('active');
+}
+
+/* ==================================================================
+   首頁：選擇表情頭像
+   ================================================================== */
+avatarOpts.forEach(opt => {
+  opt.addEventListener('click', () => {
+    avatarOpts.forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    myAvatar = opt.dataset.avatar;
+  });
+});
+
+/* ==================================================================
+   首頁：選擇建立房間 / 加入房間
+   ================================================================== */
+hostChoiceBtn.addEventListener('click', () => {
+  isHost = true; myPlayerIndex = 0;
+  switchScreen(hostModeScreen);
+});
+joinChoiceBtn.addEventListener('click', () => {
+  isHost = false; myPlayerIndex = 1;
+  switchScreen(joinScreen);
+});
+backFromHostMode.addEventListener('click', resetToHome);
+backFromHostConnect.addEventListener('click', resetToHome);
+backFromJoin.addEventListener('click', resetToHome);
+
+/* ==================================================================
+   房主：選擇炸彈規則
+   ================================================================== */
+modeButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    modeButtons.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedMode = btn.dataset.mode;
+    if (selectedMode === 'custom') customBox.classList.add('show');
+    else customBox.classList.remove('show');
+    hostNextBtn.disabled = false;
+  });
+});
+customInput.addEventListener('input', () => {
+  let val = parseInt(customInput.value, 10);
+  if (isNaN(val)) return;
+  if (val < 2) customInput.value = 2;
+  if (val > 20) customInput.value = 20;
+});
+
+hostNextBtn.addEventListener('click', () => {
+  if (!selectedMode) return;
+  if (selectedMode === 'custom') {
+    let val = parseInt(customInput.value, 10);
+    if (isNaN(val) || val < 2) val = 2;
+    if (val > 20) val = 20;
+    bombDivisor = val;
+  } else if (selectedMode === '5') bombDivisor = 5;
+  else if (selectedMode === '3') bombDivisor = 3;
+  else if (selectedMode === '4') bombDivisor = 4;
+  else bombDivisor = null;
+
+  switchScreen(hostConnectScreen);
+  createHostRoom();
+});
+
+/* ==================================================================
+   產生隨機 4 碼房間代碼
+   ================================================================== */
+function generateRoomCode() {
+  let code = '';
+  for (let i = 0; i < 4; i++) {
+    code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  }
+  return code;
+}
+
+/* ==================================================================
+   PeerJS：房主端 - 建立房間並等待玩家二連入
+   ================================================================== */
+function createHostRoom(retryCount) {
+  retryCount = retryCount || 0;
+  if (retryCount > 5) {
+    hostConnStatus.textContent = '❌ 建立房間失敗，請重新整理頁面再試';
+    hostSpinner.style.display = 'none';
+    return;
+  }
+
+  const code = generateRoomCode();
+  roomCodeValue.textContent = code;
+  hostConnStatus.textContent = '正在準備房間...';
+  hostSpinner.style.display = 'block';
+
+  peer = new Peer(ROOM_ID_PREFIX + code);
+
+  peer.on('open', () => {
+    hostConnStatus.textContent = '✅ 房間已建立，等待玩家二加入中...';
+  });
+
+  peer.on('connection', (incomingConn) => {
+    conn = incomingConn;
+    hostSpinner.style.display = 'none';
+    setupConnection();
+  });
+
+  peer.on('error', (err) => {
+    if (err.type === 'unavailable-id') {
+      // 代碼被別人用了，重新產生一組再試一次
+      peer.destroy();
+      createHostRoom(retryCount + 1);
+    } else {
+      hostConnStatus.textContent = '❌ 連線發生問題，請重新整理頁面再試';
+      hostSpinner.style.display = 'none';
+    }
+  });
+}
+
+/* ==================================================================
+   PeerJS：玩家二端 - 輸入房間代碼並連線
+   ================================================================== */
+joinCodeInput.addEventListener('input', () => {
+  joinCodeInput.value = joinCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+
+joinConnectBtn.addEventListener('click', () => {
+  const code = joinCodeInput.value.trim();
+  if (code.length !== 4) {
+    joinConnStatus.textContent = '⚠️ 請輸入完整的 4 碼房間代碼';
+    return;
+  }
+
+  joinConnStatus.textContent = '⏳ 連線中，請稍候...';
+  joinSpinner.style.display = 'block';
+  joinConnectBtn.disabled = true;
+
+  peer = new Peer();
+
+  peer.on('open', () => {
+    conn = peer.connect(ROOM_ID_PREFIX + code, { reliable: true });
+
+    conn.on('open', () => {
+      joinSpinner.style.display = 'none';
+      setupConnection();
+    });
+
+    // 設定連線逾時：若 6 秒內沒連上，提示可能代碼錯誤或房主未開房
+    setTimeout(() => {
+      if (!isGameActive && joinScreen.classList.contains('active')) {
+        joinConnStatus.textContent = '⚠️ 連線逾時，請確認房間代碼是否正確';
+        joinSpinner.style.display = 'none';
+        joinConnectBtn.disabled = false;
+      }
+    }, 6000);
+  });
+
+  peer.on('error', () => {
+    joinConnStatus.textContent = '❌ 連線失敗，請確認房間代碼或稍後再試';
+    joinSpinner.style.display = 'none';
+    joinConnectBtn.disabled = false;
+  });
+});
+
+/* ==================================================================
+   共用：連線成功後的初始化（雙方交換頭像，房主接著送出遊戲設定）
+   ================================================================== */
+function setupConnection() {
+  if (isHost) {
+    hostConnStatus.textContent = '✅ 玩家二已加入！遊戲即將開始...';
+    hostConnStatus.classList.add('ok');
+  } else {
+    joinConnStatus.textContent = '✅ 連線成功！等待房主開始遊戲...';
+    joinConnStatus.classList.add('ok');
+  }
+
+  conn.on('data', (msg) => handleMessage(msg));
+  conn.on('close', () => { console.log('連線已中斷'); });
+
+  // 雙方互相告知自己選的表情頭像
+  sendMessage({ type: 'hello', avatar: myAvatar });
+
+  if (isHost) {
+    // 房主再多等一下讓雙方都準備好，接著送出遊戲規則設定並開始遊戲
+    setTimeout(() => {
+      sendMessage({ type: 'gameInit', mode: selectedMode, bombDivisor: bombDivisor, hostAvatar: myAvatar });
+      startGameCommon();
+    }, 500);
+  }
+}
+
+function sendMessage(obj) {
+  if (conn && conn.open) conn.send(obj);
+}
+
+/* ==================================================================
+   訊息處理：依照訊息類型分派
+   ================================================================== */
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'hello':
+      opponentAvatar = msg.avatar;
+      break;
+    case 'gameInit':
+      selectedMode = msg.mode;
+      bombDivisor = msg.bombDivisor;
+      opponentAvatar = msg.hostAvatar;
+      startGameCommon();
+      break;
+    case 'move':
+      if (isHost) processMove(msg.action);
+      break;
+    case 'state':
+      applyState(msg);
+      break;
+    case 'reaction':
+      spawnFloatingEmoji(msg.emoji);
+      break;
+  }
+}
+
+/* ==================================================================
+   遊戲開始（雙方共用）
+   ================================================================== */
+function startGameCommon() {
+  currentNumber = MIN_NUMBER;
+  teamScore = 0;
+  teamStreak = 0;
+  isGameActive = true;
+
+  switchScreen(gameScreen);
+  infoPanel.style.display = 'block';
+  infoRole.textContent = myAvatar + (isHost ? ' 房主 (我)' : ' 玩家二 (我)');
+
+  updateInfoPanel();
+  updateComboBadge();
+  renderNumber(false);
+  updateProgressBar();
+  updateTurnUI();
+
+  if (isHost) hostStartTurnTimer();
+}
+
+/* ==================================================================
+   輪到誰：1>>房主(0) 2>>玩家二(1) 3>>房主(0) ...
+   ================================================================== */
+function getTurnPlayerIndex() {
+  return (currentNumber - MIN_NUMBER) % 2;
+}
+
+function updateTurnUI() {
+  const turnIndex = getTurnPlayerIndex();
+  const isMyTurn = (turnIndex === myPlayerIndex);
+
+  if (isMyTurn) {
+    turnBanner.textContent = myAvatar + ' 換你了！';
+    turnBanner.classList.add('my-turn');
+    turnBanner.classList.remove('wait-turn');
+    nextBtn.disabled = false;
+    bombBtn.disabled = false;
+  } else {
+    turnBanner.textContent = opponentAvatar + ' 對方操作中...';
+    turnBanner.classList.remove('my-turn');
+    turnBanner.classList.add('wait-turn');
+    nextBtn.disabled = true;
+    bombBtn.disabled = true;
+  }
+
+  // 重新播放倒數條動畫（純視覺提示，實際逾時判定由房主負責）
+  timerBar.classList.remove('running');
+  void timerBar.offsetWidth;
+  timerBar.style.animationDuration = TURN_SECONDS + 's';
+  timerBar.classList.add('running');
+}
+
+/* ==================================================================
+   房主專用：回合限時計時器（逾時視為答錯，增加緊張感）
+   ================================================================== */
+function hostStartTurnTimer() {
+  clearTimeout(turnTimerHandle);
+  turnTimerHandle = setTimeout(() => {
+    if (!isGameActive) return;
+    const loserIndex = getTurnPlayerIndex();
+    saveBestScoreIfNeeded();
+    const stateMsg = { type: 'state', status: 'gameover', currentNumber, score: teamScore, loserIndex, reason: 'timeout' };
+    sendMessage(stateMsg);
+    applyState(stateMsg);
+  }, TURN_SECONDS * 1000);
+}
+
+/* ==================================================================
+   右上角資訊面板：完全不顯示炸彈規則！
+   ================================================================== */
+function updateInfoPanel() {
+  infoNumber.textContent = currentNumber;
+  infoScore.textContent = teamScore;
+  infoBest.textContent = getBestScore();
+}
+function updateProgressBar() {
+  const percent = ((currentNumber - MIN_NUMBER) / (MAX_NUMBER - MIN_NUMBER)) * 100;
+  progressBar.style.width = Math.min(percent, 100) + '%';
+}
+function renderNumber(withPopAnim) {
+  numberDisplay.textContent = currentNumber;
+  numberDisplay.classList.remove('pop', 'thinking');
+  if (withPopAnim) { void numberDisplay.offsetWidth; numberDisplay.classList.add('pop'); }
+  updateInfoPanel();
+  updateProgressBar();
+}
+
+/* ==================================================================
+   連續答對 combo 顯示更新
+   ================================================================== */
+function updateComboBadge() {
+  if (teamStreak >= 3) {
+    comboBadge.textContent = '🔥 連續答對 ' + teamStreak + ' 次！';
+    comboBadge.classList.remove('pop');
+    void comboBadge.offsetWidth;
+    comboBadge.classList.add('pop');
+  } else {
+    comboBadge.textContent = '';
+  }
+}
+
+/* ==================================================================
+   玩家操作：下一個數字 / Bomb
+   按下後先播放「拆彈懸疑」動畫，營造緊張感，再送出動作
+   ================================================================== */
+nextBtn.addEventListener('click', () => { attemptAction('next'); });
+bombBtn.addEventListener('click', () => { attemptAction('bomb'); });
+
+function attemptAction(action) {
+  if (!isGameActive) return;
+  if (getTurnPlayerIndex() !== myPlayerIndex) return;
+
+  // 立刻鎖住按鈕，避免連點造成訊息重複送出
+  nextBtn.disabled = true;
+  bombBtn.disabled = true;
+
+  // 懸疑拆彈動畫：畫面抖動 + 滴答音效，350ms 後才真正送出結果
+  numberDisplay.classList.add('thinking');
+  playTickSound();
+
+  setTimeout(() => {
+    numberDisplay.classList.remove('thinking');
+    submitAction(action);
+  }, 350);
+}
+
+function submitAction(action) {
+  if (isHost) processMove(action);
+  else sendMessage({ type: 'move', action: action });
+}
+
+/* ==================================================================
+   房主端：權威判定，並廣播結果給雙方
+   ================================================================== */
+function processMove(action) {
+  clearTimeout(turnTimerHandle);
+
+  const bomb = isBombNumber(currentNumber);
+  let correct = (action === 'next') ? !bomb : bomb;
+
+  if (correct) {
+    teamScore += 1;
+    teamStreak += 1;
+
+    if (currentNumber >= MAX_NUMBER) {
+      saveBestScoreIfNeeded();
+      const stateMsg = { type: 'state', status: 'win', currentNumber, score: teamScore, streak: teamStreak };
+      sendMessage(stateMsg); applyState(stateMsg);
+      return;
+    }
+
+    const nextNum = currentNumber + 1;
+    const stateMsg = { type: 'state', status: 'correct', currentNumber: nextNum, score: teamScore, streak: teamStreak, prevNumber: currentNumber };
+    sendMessage(stateMsg); applyState(stateMsg);
+    hostStartTurnTimer();
+  } else {
+    const loserIndex = getTurnPlayerIndex();
+    saveBestScoreIfNeeded();
+    const stateMsg = { type: 'state', status: 'gameover', currentNumber, score: teamScore, loserIndex };
+    sendMessage(stateMsg); applyState(stateMsg);
+  }
+}
+
+/* ==================================================================
+   雙方共用：套用房主廣播的最新狀態
+   ================================================================== */
+function applyState(msg) {
+  if (msg.status === 'correct') {
+    teamScore = msg.score;
+    teamStreak = msg.streak;
+    playCorrectSound();
+    spawnConfetti();
+
+    numberDisplay.classList.remove('correct');
+    void numberDisplay.offsetWidth;
+    numberDisplay.classList.add('correct');
+    updateInfoPanel();
+    updateComboBadge();
+
+    // 每達成 5 的倍數連續答對，播放歡呼音效與里程碑提示
+    if (teamStreak > 0 && teamStreak % 5 === 0) {
+      playComboSound();
+      showToast('🎉 太強了！連續答對 ' + teamStreak + ' 次！');
+    }
+
+    setTimeout(() => {
+      currentNumber = msg.currentNumber;
+      renderNumber(true);
+      updateTurnUI();
+    }, 400);
+
+  } else if (msg.status === 'win') {
+    isGameActive = false;
+    teamScore = msg.score;
+    spawnConfetti(); setTimeout(spawnConfetti, 300); setTimeout(spawnConfetti, 600); setTimeout(spawnConfetti, 900);
+    winScoreEl.textContent = teamScore;
+    switchScreen(winScreen);
+    infoPanel.style.display = 'none';
+
+  } else if (msg.status === 'gameover') {
+    isGameActive = false;
+    currentNumber = msg.currentNumber;
+    teamScore = msg.score;
+    playExplosionSound();
+
+    document.body.classList.add('shake');
+    document.body.classList.add('game-over-bg');
+    setTimeout(() => document.body.classList.remove('shake'), 500);
+
+    setTimeout(() => {
+      finalScoreEl.textContent = teamScore;
+      const iLost = (msg.loserIndex === myPlayerIndex);
+      let text;
+      if (msg.reason === 'timeout') {
+        text = iLost ? '⏰ 你超時了，太慢啦！' : '⏰ 對方超時了！';
+      } else {
+        text = iLost ? '💥 是你踩到炸彈了！' : '💥 對方踩到炸彈了！';
+      }
+      whoLostText.textContent = text;
+      switchScreen(gameOverScreen);
+      infoPanel.style.display = 'none';
+    }, 500);
+  }
+}
+
+/* ==================================================================
+   表情快速反應：點擊後傳送給對方，自己也會看到飄浮動畫
+   ================================================================== */
+reactionBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const emoji = btn.dataset.emoji;
+    spawnFloatingEmoji(emoji);
+    sendMessage({ type: 'reaction', emoji: emoji });
+  });
+});
+
+/* ==================================================================
+   重新開始：回到首頁，並關閉現有連線
+   ================================================================== */
+function resetToHome() {
+  document.body.classList.remove('game-over-bg');
+  document.body.classList.remove('shake');
+
+  modeButtons.forEach(b => b.classList.remove('selected'));
+  customBox.classList.remove('show');
+  hostNextBtn.disabled = true;
+  selectedMode = null;
+  bombDivisor = null;
+
+  hostConnStatus.textContent = '正在準備房間...';
+  hostConnStatus.classList.remove('ok');
+  hostSpinner.style.display = 'block';
+  roomCodeValue.textContent = '----';
+
+  joinCodeInput.value = '';
+  joinConnStatus.textContent = '尚未連線';
+  joinConnStatus.classList.remove('ok');
+  joinSpinner.style.display = 'none';
+  joinConnectBtn.disabled = false;
+
+  clearTimeout(turnTimerHandle);
+
+  if (conn) { try { conn.close(); } catch(e){} conn = null; }
+  if (peer) { try { peer.destroy(); } catch(e){} peer = null; }
+
+  isGameActive = false;
+  switchScreen(homeScreen);
+  infoPanel.style.display = 'none';
+}
+restartBtn1.addEventListener('click', resetToHome);
+restartBtn2.addEventListener('click', resetToHome);
+</script>
+</body>
+</html>
